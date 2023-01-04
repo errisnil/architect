@@ -5,17 +5,23 @@ use postgres::{Client, NoTls};
 use postgres_native_tls::MakeTlsConnector;
 use serde::Deserialize;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 struct Config {
     app: String,
     host: String,
+    #[serde(default)]
     port: u16,
     dbname: String,
     user: String,
+    #[serde(default)]
     password: String,
-    passfile: String,
+    // #[serde(default)]
+    // passfile: String,
+    #[serde(default)]
     connect_timeout_seconds: u16,
+    #[serde(default)]
     ssl: bool,
+    #[serde(default)]
     sslrootcert: String,
 }
 
@@ -28,18 +34,18 @@ impl Config {
             }
         };
 
-        if self.passfile.is_empty() {
-            let passfile = if let Ok(v) = std::env::var("PGPASSFILE") {
-                v
-            } else {
-                "".to_owned()
-            };
-            if passfile.is_empty() {
-                self.passfile = format!("{:?}/.pgpass", &home_dir);
-            } else {
-                self.passfile = passfile;
-            }
-        }
+        // if self.passfile.is_empty() {
+        //     let passfile = if let Ok(v) = std::env::var("PGPASSFILE") {
+        //         v
+        //     } else {
+        //         "".to_owned()
+        //     };
+        //     if passfile.is_empty() {
+        //         self.passfile = format!("{:?}/.pgpass", &home_dir);
+        //     } else {
+        //         self.passfile = passfile;
+        //     }
+        // }
 
         if self.password.is_empty() {
             if let Ok(v) = std::env::var("PGPASSWORD") {
@@ -90,16 +96,27 @@ impl Config {
         if !self.password.is_empty() {
             params.push(format!("password={}", &self.password));
         }
-        if !self.passfile.is_empty() {
-            params.push(format!("passfile={}", &self.passfile));
-        }
+        // if !self.passfile.is_empty() {
+        //     params.push(format!("passfile={}", &self.passfile));
+        // }
 
         if self.ssl {
+            eprintln!("ssl with cert: {}", &self.sslrootcert);
             params.push("sslmode=require".to_string());
-            let cert = std::fs::read(&self.sslrootcert)?;
-            let cert = Certificate::from_pem(&cert)?;
-            let connector = TlsConnector::builder().add_root_certificate(cert).build()?;
+            let mut connector = TlsConnector::builder();
+            let connector = if std::path::PathBuf::from(&self.sslrootcert).exists() {
+                eprintln!("using provided root certificate");
+                // params.push(format!("sslrootcert={}", &self.sslrootcert));
+                let cert = std::fs::read(&self.sslrootcert)?;
+                let cert = Certificate::from_pem(&cert)?;
+                connector.add_root_certificate(cert).build()?
+            } else {
+                eprintln!("using system certificate");
+                connector.build()?
+            };
+
             let connector = MakeTlsConnector::new(connector);
+            eprintln!("Connection String: {}", &params.join(" "));
             return Ok(postgres::Client::connect(&params.join(" "), connector)?);
         }
         Ok(postgres::Client::connect(&params.join(" "), NoTls)?)
@@ -137,8 +154,11 @@ impl Config {
 
     fn dir(&self, parent: &std::path::PathBuf) -> Result<std::path::PathBuf> {
         let mig_path = parent.join(&self.app);
-        if !mig_path.exists() || !mig_path.is_dir() {
+        if mig_path.exists() && !mig_path.is_dir() {
             return Err(anyhow::anyhow!(format!("invalid path: {:?}", &mig_path)));
+        }
+        if !mig_path.exists() {
+            let _ = std::fs::create_dir_all(&mig_path)?;
         }
         Ok(mig_path)
     }
@@ -243,19 +263,72 @@ struct Args {
     config: String,
 }
 
+fn read_config_toml(p: &std::path::PathBuf) -> Result<Config> {
+    let cs = std::fs::read_to_string(p)?;
+    Ok(toml::from_str(&cs)?)
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
     let cp = std::path::PathBuf::from(&args.config);
     if !cp.exists() {
         return Err(anyhow::anyhow!("config path does not exist"));
     }
-
-    let cs = std::fs::read_to_string(&cp)?;
-    let config: Config = toml::from_str(&cs)?;
+    let config: Config = read_config_toml(&cp)?;
     let dir = std::path::PathBuf::from(&args.migdir);
 
     let m = Migrator::new(config, dir)?;
     println!("{:?}", &m.versions_available);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Once;
+    static INIT: Once = Once::new();
+
+    fn init() {
+        INIT.call_once(|| {
+            // Start dummy pg or cockroach server if needed
+        });
+    }
+
+    #[test]
+    fn new_migration() {
+        init();
+
+        let cs = r##"
+        app = "test"
+        dbname = "testpgmig"
+        host = "localhost"
+        port = 26257
+        user = "testadmin"
+        password = "testpass"
+        ssl = true
+        sslrootcert = "/Users/errisnil/code/cockroach/certs/ca.crt"
+        "##;
+        let config: crate::Config = toml::from_str(&cs).unwrap();
+        let mut m = crate::Migrator::new(config, std::path::PathBuf::from("./migrations")).unwrap();
+        m.new_migration().unwrap();
+        let files = std::fs::read_dir("./migrations/test").unwrap();
+        let mut count = 0;
+        let mut up_exists = false;
+        let mut down_exists = false;
+        for f in files {
+            count += 1;
+            let f = f.unwrap();
+            let file_name = f.file_name().to_str().unwrap().to_owned();
+            if file_name.ends_with("_up.sql") {
+                up_exists = true;
+            }
+            if file_name.ends_with("_down.sql") {
+                down_exists = true;
+            }
+        }
+        let _ = std::fs::remove_dir_all("./migrations/test");
+        assert_eq!(count, 2);
+        assert_eq!(up_exists, true);
+        assert_eq!(down_exists, true);
+    }
 }
