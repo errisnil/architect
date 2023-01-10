@@ -1,0 +1,8 @@
+app = "test"
+dbname = "testpgmig"
+host = "localhost"
+port = 26257
+user = "testadmin"
+password = "testpass"
+ssl=true
+sslrootcert="/home/errisnil/code/cockroach/certs/ca.crt"
