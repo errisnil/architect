@@ -464,6 +464,18 @@ struct Args {
     migdir: String,
     #[arg(short, long)]
     config: String,
+    #[arg(long)]
+    upn: usize,
+    #[arg(long)]
+    up: bool,
+    #[arg(long)]
+    downn: usize,
+    #[arg(long)]
+    down: bool,
+    #[arg(short, long)]
+    new: bool,
+    #[arg(short, long)]
+    wizard: bool,
 }
 
 fn read_config_toml(p: &std::path::PathBuf) -> Result<Config> {
