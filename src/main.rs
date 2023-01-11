@@ -385,16 +385,19 @@ impl Migrator {
         let mut version = self.last_version;
         let mut versions = Vec::<i64>::new();
         let mut count = 0;
-        for (i, v) in self.versions_down.iter().enumerate() {
-            // Prepending
-            if *v < version && count < n {
-                versions.splice(0..0, [*v].iter().cloned());
+        let mut index = 0;
+        for (i, v) in self.versions_down.iter().rev().enumerate() {
+            if *v <= version && count < n {
+                versions.push(*v);
                 version = *v;
                 count += 1;
+                index = self.versions_down.len() - 1 - i;
             }
         }
+        eprintln!("index: {}", &index);
 
         for v in versions.iter() {
+            self.last_version = *v;
             if !test {
                 match self.run_migration(*v, "up".to_owned()) {
                     Ok(_) => {}
@@ -407,7 +410,13 @@ impl Migrator {
                     }
                 }
             }
-            self.last_version = *v;
+        }
+        if index > 0 {
+            if let Some(v) = self.versions_down.get(index - 1) {
+                self.last_version = *v;
+            }
+        } else {
+            self.last_version = 0;
         }
 
         Ok(versions.len())
@@ -420,15 +429,15 @@ impl Migrator {
 
         let mut version = self.last_version;
         let mut versions = Vec::<i64>::new();
-        for v in self.versions_down.iter() {
-            // Prepending
-            if *v < version {
-                versions.splice(0..0, [*v].iter().cloned());
+        for v in self.versions_down.iter().rev() {
+            if *v <= version {
+                versions.push(*v);
                 version = *v;
             }
         }
 
         for v in versions.iter() {
+            self.last_version = *v;
             if !test {
                 match self.run_migration(*v, "up".to_owned()) {
                     Ok(_) => {}
@@ -441,8 +450,8 @@ impl Migrator {
                     }
                 }
             }
-            self.last_version = *v;
         }
+        self.last_version = 0;
 
         Ok(versions.len())
     }
@@ -651,27 +660,71 @@ DROP TABLE IF EXISTS __another__;",
         assert_eq!(n, N);
     }
     #[test]
-    fn mig_down_n() {
+    fn mig_down_n_gt_N() {
         init();
         let config = test_config().unwrap();
-        let mut m = crate::Migrator::new(config, std::path::PathBuf::from("./mig_down_n")).unwrap();
+        let mut m =
+            crate::Migrator::new(config, std::path::PathBuf::from("./mig_down_n_gt_N")).unwrap();
         const N: usize = 15;
         for _ in 0..N {
             m.new_migration().unwrap();
         }
-        m.last_version = *m.versions_up.last().unwrap();
+        // n > N
+        m.last_version = *m.versions_down.last().unwrap();
+        let n = m.migrate_down_n(20, true).unwrap(); // call with test true to not run migrations
+
+        let _ = std::fs::remove_dir_all("./mig_down_n_gt_N");
+
+        assert_eq!(m.last_version, 0);
+        assert_eq!(n, 15);
+    }
+    #[test]
+    fn mig_down_n_lt_N() {
+        init();
+        let config = test_config().unwrap();
+        let mut m =
+            crate::Migrator::new(config, std::path::PathBuf::from("./mig_down_n_lt_N")).unwrap();
+        const N: usize = 15;
+        for _ in 0..N {
+            m.new_migration().unwrap();
+        }
+        // n > N
+        m.last_version = *m.versions_down.last().unwrap();
         let n = m.migrate_down_n(5, true).unwrap(); // call with test true to not run migrations
 
-        let _ = std::fs::remove_dir_all("./mig_down_n");
+        let _ = std::fs::remove_dir_all("./mig_down_n_lt_N");
 
         assert_eq!(Some(&m.last_version), m.versions_down.get(9));
         assert_eq!(n, 5);
     }
     #[test]
-    fn mig_down() {
+    fn mig_down_n_not_from_end() {
         init();
         let config = test_config().unwrap();
-        let mut m = crate::Migrator::new(config, std::path::PathBuf::from("./mig_down_n")).unwrap();
+        let mut m = crate::Migrator::new(
+            config,
+            std::path::PathBuf::from("./mig_down_n_not_from_end"),
+        )
+        .unwrap();
+        const N: usize = 15;
+        for _ in 0..N {
+            m.new_migration().unwrap();
+        }
+        // n > N
+        m.last_version = *m.versions_down.get(11).unwrap();
+        let n = m.migrate_down_n(5, true).unwrap(); // call with test true to not run migrations
+
+        let _ = std::fs::remove_dir_all("./mig_down_n_not_from_end");
+
+        assert_eq!(Some(&m.last_version), m.versions_down.get(6));
+        assert_eq!(n, 5);
+    }
+    #[test]
+    fn mig_down_from_end() {
+        init();
+        let config = test_config().unwrap();
+        let mut m =
+            crate::Migrator::new(config, std::path::PathBuf::from("./mig_down_from_end")).unwrap();
         const N: usize = 15;
         for _ in 0..N {
             m.new_migration().unwrap();
@@ -679,9 +732,28 @@ DROP TABLE IF EXISTS __another__;",
         m.last_version = *m.versions_up.last().unwrap();
         let n = m.migrate_down(true).unwrap(); // call with test true to not run migrations
 
-        let _ = std::fs::remove_dir_all("./mig_down_n");
+        let _ = std::fs::remove_dir_all("./mig_down_from_end");
 
-        assert_eq!(Some(&m.last_version), m.versions_down.get(9));
-        assert_eq!(n, 5);
+        assert_eq!(m.last_version, 0);
+        assert_eq!(n, 15);
+    }
+    #[test]
+    fn mig_down_from_not_end() {
+        init();
+        let config = test_config().unwrap();
+        let mut m =
+            crate::Migrator::new(config, std::path::PathBuf::from("./mig_down_from_not_end"))
+                .unwrap();
+        const N: usize = 15;
+        for _ in 0..N {
+            m.new_migration().unwrap();
+        }
+        m.last_version = *m.versions_up.get(11).unwrap();
+        let n = m.migrate_down(true).unwrap(); // call with test true to not run migrations
+
+        let _ = std::fs::remove_dir_all("./mig_down_from_not_end");
+
+        assert_eq!(m.last_version, 0);
+        assert_eq!(n, 12);
     }
 }
