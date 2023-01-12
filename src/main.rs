@@ -1,3 +1,5 @@
+use std::io::{self, Write};
+
 use anyhow::Result;
 use clap::Parser;
 use native_tls::{Certificate, TlsConnector};
@@ -296,7 +298,7 @@ impl Migrator {
     }
 
     fn run_migration(&mut self, version: i64, direction: String) -> Result<()> {
-        eprintln!("run_migration called");
+        // eprintln!("run_migration called");
         let queries = self.get_queries(version, &direction)?;
         let mut t = self.client.transaction()?;
         for query in queries {
@@ -309,6 +311,10 @@ impl Migrator {
     fn migrate_up_n(&mut self, n: usize, test: bool) -> Result<usize> {
         if self.versions_up.is_empty() {
             return Err(anyhow::anyhow!("no migrations found"));
+        }
+
+        if n < 1 {
+            return Err(anyhow::anyhow!("migrating {} steps makes no sense!", n));
         }
 
         let mut version = self.last_version;
@@ -378,8 +384,8 @@ impl Migrator {
             return Err(anyhow::anyhow!("no migrations found"));
         }
 
-        if n == 0 {
-            return Err(anyhow::anyhow!("0 steps requested"));
+        if n < 1 {
+            return Err(anyhow::anyhow!("migrating {} steps down makes no sense", n));
         }
 
         let mut version = self.last_version;
@@ -399,7 +405,7 @@ impl Migrator {
         for v in versions.iter() {
             self.last_version = *v;
             if !test {
-                match self.run_migration(*v, "up".to_owned()) {
+                match self.run_migration(*v, "down".to_owned()) {
                     Ok(_) => {}
                     Err(e) => {
                         eprintln!("{}", e);
@@ -439,7 +445,7 @@ impl Migrator {
         for v in versions.iter() {
             self.last_version = *v;
             if !test {
-                match self.run_migration(*v, "up".to_owned()) {
+                match self.run_migration(*v, "down".to_owned()) {
                     Ok(_) => {}
                     Err(e) => {
                         eprintln!("{}", e);
@@ -464,11 +470,11 @@ struct Args {
     migdir: String,
     #[arg(short, long)]
     config: String,
-    #[arg(long)]
+    #[arg(long, default_value = "0")]
     upn: usize,
     #[arg(long)]
     up: bool,
-    #[arg(long)]
+    #[arg(long, default_value = "0")]
     downn: usize,
     #[arg(long)]
     down: bool,
@@ -483,6 +489,60 @@ fn read_config_toml(p: &std::path::PathBuf) -> Result<Config> {
     Ok(toml::from_str(&cs)?)
 }
 
+fn wizard(mut m: Migrator) -> Result<()> {
+    const HELP: &str = r##"
+Choose an action from the following:
+1. Create a new migration
+2. Migrate up all new migrations from last migrated version
+3. Migrate up `n` steps. `n` can safely be greater than the number of available versions. The remaining steps are NOP
+4. Migrate down all migrations from last migrated version
+5. Migrate down `n` steps from last version. `n` can safely be greater than available versions. Remaining steps are NOP
+6. Migrate down 1 step and then migrate up 1 step. This is a special option to reapply the last version
+7. Quit
+"##;
+    const PROMPT: &str = "pgmig>> ";
+
+    loop {
+        eprint!("{HELP}\n{PROMPT}");
+        let mut user_input = String::new();
+        (std::io::stdin()).read_line(&mut user_input)?;
+        // eprintln!("This is {user_input} yo!");
+        if &user_input == "1\n" {
+            m.new_migration()?;
+            continue;
+        } else if &user_input == "2\n" {
+            eprintln!("Migrated up {} versions!", m.migrate_up(false)?);
+            continue;
+        } else if &user_input == "3\n" {
+            let mut ns = String::new();
+            (std::io::stdin()).read_line(&mut ns)?;
+            ns = String::from(ns.trim_matches('\n'));
+            let n: usize = ns.parse()?;
+            eprintln!("Migrated up {} versions!", m.migrate_up_n(n, false)?);
+            continue;
+        } else if user_input == "4\n" {
+            eprintln!("Migrated down {} versions!", m.migrate_down(false)?);
+            continue;
+        } else if &user_input == "5\n" {
+            let mut ns = String::new();
+            (std::io::stdin()).read_line(&mut ns)?;
+            ns = String::from(ns.trim_matches('\n'));
+            let n: usize = ns.parse()?;
+            eprintln!("Migrated down {} versions!", m.migrate_down_n(n, false)?);
+            continue;
+        } else if &user_input == "6\n" {
+            eprintln!("Migrating down");
+            m.migrate_down_n(1, false)?;
+            eprintln!("Migrating up");
+            m.migrate_up_n(1, false)?;
+            continue;
+        } else if &user_input == "7\n" {
+            break;
+        }
+    }
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
     let cp = std::path::PathBuf::from(&args.config);
@@ -493,9 +553,9 @@ fn main() -> Result<()> {
     let dir = std::path::PathBuf::from(&args.migdir);
 
     let m = Migrator::new(config, dir)?;
-    println!("versions up:\n{:?}", &m.versions_up);
-    println!("versions down:\n{:?}", &m.versions_down);
-
+    if args.wizard {
+        return wizard(m);
+    }
     Ok(())
 }
 
