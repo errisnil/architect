@@ -572,7 +572,7 @@ mod tests {
     }
 
     fn test_config() -> Result<crate::Config> {
-        let p = std::env::var("PGMIG_TEST_CONFIG")?;
+        let p = std::env::var("ARCHITECT_TEST_CONFIG")?;
         let s = std::fs::read_to_string(p)?;
         let c: crate::Config = toml::from_str(&s)?;
         Ok(c)
