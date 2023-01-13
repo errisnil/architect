@@ -1,12 +1,9 @@
-use std::io::{self, Write};
-
 use anyhow::Result;
 use clap::Parser;
 use native_tls::{Certificate, TlsConnector};
 use postgres::{Client, NoTls};
 use postgres_native_tls::MakeTlsConnector;
 use serde::Deserialize;
-use sqlparser::dialect::PostgreSqlDialect;
 
 #[derive(Deserialize, Default)]
 struct Config {
@@ -18,8 +15,6 @@ struct Config {
     user: String,
     #[serde(default)]
     password: String,
-    // #[serde(default)]
-    // passfile: String,
     #[serde(default)]
     connect_timeout_seconds: u16,
     #[serde(default)]
@@ -86,9 +81,6 @@ impl Config {
         if !self.password.is_empty() {
             params.push(format!("password={}", &self.password));
         }
-        // if !self.passfile.is_empty() {
-        //     params.push(format!("passfile={}", &self.passfile));
-        // }
 
         if self.ssl {
             eprintln!("ssl with cert: {}", &self.sslrootcert);
@@ -157,7 +149,7 @@ impl Config {
 }
 
 struct Migrator {
-    config: Config,
+    // config: Config,
     dir: std::path::PathBuf,
     last_version: i64,
     client: Client,
@@ -171,7 +163,7 @@ impl Migrator {
         let dir = config.dir(&dir)?;
         let (client, last_version) = config.init()?;
         let mut m = Migrator {
-            config,
+            // config,
             dir,
             last_version,
             client,
@@ -182,6 +174,23 @@ impl Migrator {
         m.initialized = true;
         m.available_versions()?;
         Ok(m)
+    }
+
+    fn test_versions(&self) -> Result<()> {
+        for (i, v) in self.versions_up.iter().enumerate() {
+            if let Some(d) = self.versions_down.get(i) {
+                if *v != *d {
+                    return Err(anyhow::anyhow!(
+                        "version mismatch for up and down. Please make sure every `up` 
+version has a corresponding `down` version in your migration directory",
+                    ));
+                }
+            } else {
+                return Err(anyhow::anyhow!("None in versions"));
+            }
+        }
+
+        Ok(())
     }
 
     fn available_versions(&mut self) -> Result<()> {
@@ -228,7 +237,7 @@ impl Migrator {
                     }
                 }
                 Err(e) => {
-                    eprintln!("{:?}", e);
+                    eprintln!("{}", e);
                 }
             }
         }
@@ -236,7 +245,7 @@ impl Migrator {
         self.versions_down = vdown;
         self.versions_up.sort();
         self.versions_down.sort();
-
+        self.test_versions()?;
         Ok(())
     }
 
@@ -244,8 +253,8 @@ impl Migrator {
         let ts = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_millis();
-        let up = self.dir.join(format!("{}_up.sql", ts));
-        let down = self.dir.join(format!("{}_down.sql", ts));
+        let up = self.dir.join(format!("{ts}_up.sql"));
+        let down = self.dir.join(format!("{ts}_down.sql"));
         if up.exists() {
             return Err(anyhow::anyhow!(format!("file {:?} exists", &up)));
         }
@@ -255,6 +264,9 @@ impl Migrator {
         }
         let _ = std::fs::File::create(&down)?;
         self.available_versions()?;
+        eprintln!("new migration files created:");
+        eprintln!("{:?}", up);
+        eprintln!("{:?}", down);
         Ok(())
     }
 
@@ -284,13 +296,11 @@ impl Migrator {
         }
         if direction == "up" {
             result.push(format!(
-                "INSERT INTO schema_migrations(version) VALUES ({})",
-                version
+                "INSERT INTO schema_migrations(version) VALUES ({version})",
             ));
         } else if direction == "down" {
             result.push(format!(
-                "DELETE FROM schema_migrations WHERE version = {}",
-                version,
+                "DELETE FROM schema_migrations WHERE version = {version}",
             ))
         }
 
@@ -466,20 +476,30 @@ impl Migrator {
 #[derive(Debug, Parser)]
 #[command(author,version,about,long_about=None)]
 struct Args {
+    /// The parent migration directory. This will include sub directories for each application as
+    /// defined by configs passed. These subdirectories contain the actual migration files.
     #[arg(short, long, default_value = "./migrations")]
     migdir: String,
+    /// Path to the config file that contains the app name and database connection parameters
     #[arg(short, long)]
     config: String,
+    /// Migrate upwards n steps from last recorded version
     #[arg(long, default_value = "0")]
     upn: usize,
+    /// Migrate up all existing versions from the last recorded version
     #[arg(long)]
     up: bool,
+    // Migrate downwards n steps from last recorded version
     #[arg(long, default_value = "0")]
     downn: usize,
+    /// Migrate downwards all version from last recorded version. Be careful!
     #[arg(long)]
     down: bool,
+    /// Create a new migration version. <timestamp>_up.sql and <timestamp>_down.sql files are
+    /// created on running this.
     #[arg(short, long)]
     new: bool,
+    /// Invoke the wizard for a guided migration experience.
     #[arg(short, long)]
     wizard: bool,
 }
