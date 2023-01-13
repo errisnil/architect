@@ -36,48 +36,72 @@ option or the `--wizard` mode to generate new migrations.
 
 There are two bits of configuration to keep in mind:
 
-## Binary Config
+## The Executable's Config
 
-1. --config -> path to a .toml config file detailing connection to the database migrations should be run in.
-2. --migdir -> path to the directory where the migrations files reside. Please note that this is a parent directory - basis the `app` option provided in the config file a sub directory will be created which will contain all the generated migration files.
+### --config
+path to a .toml config file detailing connection to the database migrations will be run on.
 
+### --migdir
+path to the directory where the migration files reside. Please note that this is a
+parent directory. Basis the `app` option provided in the config file a sub directory 
+is created which will contain all generated migration files. Defaults to `./migrations`
+
+### --new
+a new version of migration files are generated. One for up 
+[timestamp]_up.sql and one for down [timestamp]_down.sql
+
+### --upn <N>
+Migrate up `N` times or till the end of the remaining migration versions whichever happens eralier.
+
+### --up
+Migrate up all remaining versions.
+
+### --downn <N>
+Migrate down `N` times or till the beginnning of migration versions whichever happens earlier.
+
+### --down
+Migrate down till the beginning of migrations. Be very sure this is what you want to run.
+
+### --wizard
+A wizard takes over and guides you through the migration experience.
+
+### --help
+Prints help info
+
+### --version
+Prints version info
+
+There are a few other options to be able to run 
 ## Database Config
+This is provided by a `.toml` file using the `--config` option of the executable.
 ### app: String
-
 The name of the app for which this migration is being run. The 
 
 ### dbname: String
-
 The name of the database to connect to
 
 ### host: String
 The sql server host
 
 ### port: Number
-
 The sql server port. Default: 5432
 
 ### user: String
-
 The user name to authenticate with
 
 ### password: String
-
 The password to authenticate with
 
 ### ssl: Boolean
-
 Whether the connection should use tls
 
 ### sslrootcert: String
-
 Path of the root certificate to be used in case `ssl` is true. When not provided the env 
 variable `PGSSLROOTCERT`, if set, is used. If the env variable is not set either it falls back
 to `~/.postgresql/root.crt`.
 
 ### connect_timeout_seconds: Number
-
-Maximum time to wait when establishing connection with databse server. Default: 0 which would make it wait indefinitely.
+Maximum time to wait when establishing connection with databse server. Default of 0 will make it wait indefinitely.
 
 # Build
 
