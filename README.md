@@ -28,7 +28,7 @@ for available options.
 ## IMPORTANT
 
 Please note that the this binary generates migration files for you and it will only work with the
-naming convention ( timestamp-millis_(up|down).sql ) of these generated files. While you can generate
+naming convention ( `timestamp-millis_(up|down).sql` ) of these generated files. While you can generate
 these files yourself it is highly recommended that you don't. Please use the `--new` command line
 option or the `--wizard` mode to generate new migrations.
 
