@@ -41,7 +41,7 @@ There are two bits of configuration to keep in mind:
 ### --config
 path to a .toml config file detailing connection to the database migrations will be run on.
 
-### --migdir
+### --migdir=PATH
 path to the directory where the migration files reside. Please note that this is a
 parent directory. Basis the `app` option provided in the config file a sub directory 
 is created which will contain all generated migration files. Defaults to `./migrations`
@@ -50,13 +50,13 @@ is created which will contain all generated migration files. Defaults to `./migr
 a new version of migration files are generated. One for up 
 `[timestamp]_up.sql` and one for down `[timestamp]_down.sql`
 
-### --upn <N>
+### --upn=N
 Migrate up `N` times or till the end of the remaining migration versions whichever happens eralier.
 
 ### --up
 Migrate up all remaining versions.
 
-### --downn <N>
+### --downn=N
 Migrate down `N` times or till the beginnning of migration versions whichever happens earlier.
 
 ### --down
