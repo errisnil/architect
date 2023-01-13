@@ -28,7 +28,7 @@ for available options.
 ## IMPORTANT
 
 Please note that the this binary generates migration files for you and it will only work with the
-naming convention ( `timestamp-millis_(up|down).sql` ) of these generated files. While you can generate
+naming convention ( `timestamp_(up|down).sql` ) of these generated files. While you can generate
 these files yourself it is highly recommended that you don't. Please use the `--new` command line
 option or the `--wizard` mode to generate new migrations.
 
@@ -48,7 +48,7 @@ is created which will contain all generated migration files. Defaults to `./migr
 
 ### --new
 a new version of migration files are generated. One for up 
-[timestamp]_up.sql and one for down [timestamp]_down.sql
+`[timestamp]_up.sql` and one for down `[timestamp]_down.sql`
 
 ### --upn <N>
 Migrate up `N` times or till the end of the remaining migration versions whichever happens eralier.
@@ -71,7 +71,6 @@ Prints help info
 ### --version
 Prints version info
 
-There are a few other options to be able to run 
 ## Database Config
 This is provided by a `.toml` file using the `--config` option of the executable.
 ### app: String
