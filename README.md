@@ -8,7 +8,7 @@ Basis a config file ([sample](https://github.com/errisnil/architect/blob/main/ex
 running migrations for a database.
 
 A default table called `schema_migrations` is created in the database configured. This
-table keeps track of the migrations run so far and helps with migrating down.
+table keeps track of the migrations run so far.
 
 # Usage
 
