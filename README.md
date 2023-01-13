@@ -4,7 +4,7 @@ A postgres (cockroach) migration tool. This is still alpha grade software.
 
 # Structure
 
-Basis a config file (sample: `extras/test_config.toml`) it guides one through the process of
+Basis a config file ([sample](https://github.com/errisnil/architect/blob/main/extras/test_config.toml)) it guides one through the process of
 running migrations for a database.
 
 A default table called `schema_migrations` is created in the database configured. This
@@ -79,10 +79,17 @@ to `~/.postgresql/root.crt`.
 
 Maximum time to wait when establishing connection with databse server. Default: 0 which would make it wait indefinitely.
 
+# Build
+
+```sh
+cargo build --release
+```
 
 # Tests
 
-To be able to run the tests a connection config file is required. A sample is available at `extras/test_config.toml`. Once it's configured for a working database run
+To be able to run the tests a connection config file is required. A sample is available at
+[extras/test_config.toml](https://github.com/errisnil/architect/blob/main/extras/test_config.toml).
+Once it's configured for a working database run
 
 ```sh
 ARCHITECT_TEST_CONFIG="./extras/test_config.toml" cargo test -- --nocapture
